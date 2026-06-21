@@ -1,0 +1,37 @@
+## Using default values from https://github.com/grafana-community/helm-charts/blob/main/charts/grafana/values.yaml
+##
+grafana:
+  enabled: true
+  defaultDashboardsTimezone: Asia/Taipei
+  # Administrator credentials when not using an existing secret (see below)
+  adminUser: admin
+  adminPassword: admin
+
+  sidecar:
+    dashboards:
+      enabled: true
+      annotations:
+        grafana_folder: "default"
+      folderAnnotation: "grafana_folder"
+      provider:
+        allowUiUpdates: true
+        foldersFromFilesStructure: true
+
+## Deploy a Prometheus instance
+##
+prometheus:
+  enabled: true
+  prometheusSpec:
+    additionalScrapeConfigs:
+      - job_name: "dcgm-exporter"
+        metrics_path: '/metrics'
+        scrape_interval: 30s
+        static_configs:
+          - targets:
+            - nvidia-dcgm-exporter.gpu-operator.svc.cluster.local:9400
+      - job_name: "volcano"
+        metrics_path: '/metrics'
+        scrape_interval: 30s
+        static_configs:
+          - targets:
+            - volcano-scheduler-service.volcano-system.svc.cluster.local:8080
