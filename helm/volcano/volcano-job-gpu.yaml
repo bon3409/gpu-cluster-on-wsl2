@@ -25,4 +25,4 @@ spec:
                 medium: Memory
           restartPolicy: OnFailure
           nodeSelector:
-            feature.node.kubernetes.io/pci-1414.present: "true"
+            feature.node.kubernetes.io/pci-10de.present: "true"

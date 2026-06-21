@@ -20,7 +20,7 @@ This directory provides Volcano-based GPU job configurations for running batch w
 - **Volcano**: Designed for batch workloads, provides gang scheduling, job priority, and preemption—ideal for ML training.
 - **GPU Request**: `nvidia.com/gpu: 1` tells the NVIDIA device plugin to allocate a GPU from the host (WSL2 forwards the GTX 1050 Ti).
 - **Shared Memory (`/dev/shm`)**: Many GPU frameworks (TensorFlow, PyTorch) need large shared memory; `volcano-job-gpu.yaml` mounts an `emptyDir` medium Memory at `/dev/shm`.
-- **Node Selector**: `volcano-job-gpu.yaml` uses `feature.node.kubernetes.io/pci-1414.present=true` to pin pods to the GPU node. Note: other job files use `restartPolicy: Never` (no node selector).
+- **Node Selector**: `volcano-job-gpu.yaml` uses `feature.node.kubernetes.io/pci-10de.present=true` to pin pods to the GPU node. Note: other job files use `restartPolicy: Never` (no node selector).
 - **Restart Policy**: `volcano-job-gpu.yaml` uses `OnFailure`; `queue-job.yaml` and `vcjob-gpu-test.yaml` use `PodFailed → RestartJob` policy.
 
 ## Queue Architecture
@@ -89,4 +89,4 @@ kubectl -n volcano-system port-forward svc/volcano-dashboard 8080:80 --address 0
 - The GTX 1050 Ti has limited compute capability (CC 6.1); verify that your container image supports this architecture.
 - For multiple GPUs, adjust `replicas` and `nvidia.com/gpu` limits accordingly, and ensure the node has enough GPUs.
 - `queue-job.yaml` requires the `gpu-queue` to exist first (`kubectl apply -f queue.yaml`).
-- The `pci-1414` in `volcano-job-gpu.yaml`'s nodeSelector matches the PCIe ID exposed by the GPU Operator on this WSL2 setup—verify with `kubectl get node minikube -o jsonpath='{.metadata.labels}'` if you redeploy on different hardware.
+- The `pci-10de` in `volcano-job-gpu.yaml`'s nodeSelector matches the PCIe ID exposed by the GPU Operator on this WSL2 setup—verify with `kubectl get node minikube -o jsonpath='{.metadata.labels}'` if you redeploy on different hardware.
