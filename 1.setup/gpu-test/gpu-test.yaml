@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-test
+  labels:
+    app: gpu-test
+spec:
+  restartPolicy: OnFailure
+  containers:
+    - name: gpu-test
+      # 使用 NVIDIA 官方的 CUDA 範例鏡像
+      image: "nvidia/samples:vectoradd-cuda11.6.0"
+      resources:
+        limits:
+          # 關鍵：向 K8s 請求 1 張 GPU
+          nvidia.com/gpu: 1

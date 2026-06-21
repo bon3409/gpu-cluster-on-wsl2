@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-burn-30s
+  labels:
+    app: gpu-burn
+spec:
+  restartPolicy: OnFailure
+  containers:
+  - name: gpu-burn
+    # 改用更穩定的 CUDA 11.8 鏡像，對舊卡支援度更好
+    image: nvidia/cuda:11.8.0-devel-ubuntu22.04
+    command: ["/bin/bash", "-c"]
+    args:
+      - |
+        apt-get update && apt-get install -y wget git make g++
+        git clone https://github.com/wilicc/gpu-burn.git
+        cd gpu-burn
+        
+        # 關鍵修正：指定 1050 Ti 的 Compute Capability 為 6.1
+        make COMPUTE=61
+        
+        echo "=== 開始 GPU 30 秒壓測 ==="
+        ./gpu_burn 30
+        echo "=== 壓測結束 ==="
+    resources:
+      limits:
+        nvidia.com/gpu: 1
