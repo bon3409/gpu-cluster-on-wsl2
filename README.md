@@ -2,7 +2,7 @@
 
 ## Background
 
-This project sets up a **Minikube + GPU Operator** cluster on **WSL2**, targeting an older **NVIDIA GeForce GTX 1050 Ti** (Maxwell architecture, Compute Capability 6.1) for GPU workloads.
+This project sets up a **Minikube + GPU Operator** cluster on **WSL2**, targeting an older **NVIDIA GeForce GTX 1050 Ti** (Pascal architecture, GP107, Compute Capability 6.1) for GPU workloads.
 
 The GTX 1050 Ti is a legacy GPU with limited out-of-the-box support in the K8s ecosystem, requiring the following custom node labels:
 
