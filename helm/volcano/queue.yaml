@@ -1,0 +1,12 @@
+---
+
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: Queue
+metadata:
+  name: gpu-queue
+spec:
+  weight: 1
+  priority: 100
+  reclaimable: true
+  capability:
+    nvidia.com/gpu: 1

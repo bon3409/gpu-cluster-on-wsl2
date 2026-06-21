@@ -1,0 +1,40 @@
+# vcjob-gpu-test.yaml
+apiVersion: batch.volcano.sh/v1alpha1
+kind: Job
+metadata:
+  name: gpu-test-job
+spec:
+  minAvailable: 1
+  schedulerName: volcano
+  # If you omit the 'queue' field, the 'default' queue will be used.
+  # queue: default
+  policies:
+    # If a pod fails (e.g., due to an application error), restart the entire job.
+    - event: PodFailed
+      action: RestartJob
+  tasks:
+    - replicas: 1
+      name: gpu-task
+      policies:
+        # When this specific task completes successfully, mark the entire job as Complete.
+        - event: TaskCompleted
+          action: CompleteJob
+      template:
+        spec:
+          containers:
+            - command:
+              - sh
+              - -c
+              - |
+                nvidia-smi
+                sleep 30
+              image: nvidia/samples:vectoradd-cuda11.6.0
+              name: gpu-container
+              resources:
+                limits:
+                  nvidia.com/gpu: 1
+                  cpu: 1
+                requests:
+                  nvidia.com/gpu: 1
+                  cpu: 1
+          restartPolicy: Never

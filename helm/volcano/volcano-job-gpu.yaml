@@ -1,0 +1,28 @@
+apiVersion: batch.volcano.sh/v1alpha1
+kind: Job
+metadata:
+  name: gpu-tensorflow-job
+spec:
+  minAvailable: 1
+  schedulerName: volcano
+  tasks:
+    - replicas: 2
+      template:
+        spec:
+          containers:
+            - name: tensorflow
+              image: tensorflow/tensorflow:2.5.0-gpu
+              command: ["sh", "-c", "nvidia-smi; python -c \"import tensorflow as tf; print('TensorFlow version:', tf.__version__); print('GPUs:', tf.config.list_physical_devices('GPU'))\""]
+              resources:
+                limits:
+                  nvidia.com/gpu: 1
+              volumeMounts:
+                - name: dshm
+                  mountPath: /dev/shm
+          volumes:
+            - name: dshm
+              emptyDir:
+                medium: Memory
+          restartPolicy: OnFailure
+          nodeSelector:
+            feature.node.kubernetes.io/pci-1414.present: "true"

@@ -1,0 +1,37 @@
+---
+apiVersion: batch.volcano.sh/v1alpha1
+kind: Job
+metadata:
+  name: gpu-job-using-queue
+spec:
+  minAvailable: 0
+  schedulerName: volcano
+  queue: gpu-queue
+  policies:
+    - event: PodFailed
+      action: RestartJob
+  tasks:
+    - replicas: 1
+      name: gpu-task
+      minAvailable: 0
+      policies:
+        - event: TaskCompleted
+          action: CompleteJob
+      template:
+        metadata:
+          annotations:
+            volcano.sh/pod-group-name: gpu-podgroup
+        spec:
+          containers:
+            - command:
+                - sh
+                - -c
+                - |
+                  nvidia-smi
+                  sleep 30
+              image: nvidia/samples:vectoradd-cuda11.6.0
+              name: gpu-container
+              resources:
+                limits:
+                  nvidia.com/gpu: 1
+          restartPolicy: Never
