@@ -1,0 +1,355 @@
+{
+  "name": "GPU Alerts",
+  "folder": "GPU Alerting",
+  "interval_seconds": 60,
+  "rules": [
+    {
+      "uid": "gpu_high_temp_minikube",
+      "name": "GPUHighTempMinikube",
+      "condition": "C",
+      "for": "0m",
+      "no_data_state": "NoData",
+      "exec_err_state": "Alerting",
+      "is_paused": false,
+      "annotations": {
+        "summary": "GPU temperature on minikube gpu=0 exceeds 80C (avg > 80 for evaluation period)",
+        "runbook_url": "runbooks/gpu-high-temp-minikube.md"
+      },
+      "labels": {
+        "severity": "warning",
+        "team": "gpu-ops"
+      },
+      "data": [
+        {
+          "ref_id": "A",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 300,
+            "to": 0
+          },
+          "datasource_uid": "prometheus",
+          "model": {
+            "expr": "avg by(gpu) (avg_over_time(DCGM_FI_DEV_GPU_TEMP{Hostname=~\"minikube\", gpu=~\"0\"}[5m]))",
+            "legendFormat": "",
+            "instant": false,
+            "intervalMs": 1000,
+            "maxDataPoints": 43200,
+            "refId": "A"
+          }
+        },
+        {
+          "ref_id": "B",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 300,
+            "to": 0
+          },
+          "datasource_uid": "__expr__",
+          "model": {
+            "expression": "A",
+            "type": "reduce",
+            "reducer": "last",
+            "refId": "B"
+          }
+        },
+        {
+          "ref_id": "C",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 300,
+            "to": 0
+          },
+          "datasource_uid": "__expr__",
+          "model": {
+            "expression": "B",
+            "type": "threshold",
+            "conditions": [
+              {
+                "evaluator": {
+                  "params": [
+                    80
+                  ],
+                  "type": "gt"
+                },
+                "operator": {
+                  "type": "and"
+                },
+                "query": {
+                  "params": [
+                    "B"
+                  ]
+                },
+                "reducer": {
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            ],
+            "refId": "C"
+          }
+        }
+      ]
+    },
+    {
+      "uid": "gpu_critical_temperature",
+      "name": "GPUCriticalTemperature",
+      "condition": "C",
+      "for": "1m",
+      "no_data_state": "NoData",
+      "exec_err_state": "Alerting",
+      "is_paused": false,
+      "annotations": {
+        "summary": "GPU temperature critically high (>90C) on {{ $labels.instance }}. Immediate action required.",
+        "runbook_url": "runbooks/gpu-critical-temperature.md"
+      },
+      "labels": {
+        "severity": "critical",
+        "team": "gpu-ops"
+      },
+      "data": [
+        {
+          "ref_id": "A",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 60,
+            "to": 0
+          },
+          "datasource_uid": "prometheus",
+          "model": {
+            "expr": "avg by(gpu) (avg_over_time(DCGM_FI_DEV_GPU_TEMP{Hostname=~\"minikube\", gpu=~\"0\"}[1m]))",
+            "legendFormat": "",
+            "instant": false,
+            "intervalMs": 1000,
+            "maxDataPoints": 43200,
+            "refId": "A"
+          }
+        },
+        {
+          "ref_id": "B",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 60,
+            "to": 0
+          },
+          "datasource_uid": "__expr__",
+          "model": {
+            "expression": "A",
+            "type": "reduce",
+            "reducer": "last",
+            "refId": "B"
+          }
+        },
+        {
+          "ref_id": "C",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 60,
+            "to": 0
+          },
+          "datasource_uid": "__expr__",
+          "model": {
+            "expression": "B",
+            "type": "threshold",
+            "conditions": [
+              {
+                "evaluator": {
+                  "params": [
+                    90
+                  ],
+                  "type": "gt"
+                },
+                "operator": {
+                  "type": "and"
+                },
+                "query": {
+                  "params": [
+                    "B"
+                  ]
+                },
+                "reducer": {
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            ],
+            "refId": "C"
+          }
+        }
+      ]
+    },
+    {
+      "uid": "gpu_memory_high",
+      "name": "GPUMemoryHigh",
+      "condition": "C",
+      "for": "5m",
+      "no_data_state": "NoData",
+      "exec_err_state": "Alerting",
+      "is_paused": false,
+      "annotations": {
+        "summary": "GPU memory utilization exceeds 95% on {{ $labels.instance }}",
+        "runbook_url": "runbooks/gpu-memory-high.md"
+      },
+      "labels": {
+        "severity": "warning",
+        "team": "gpu-ops"
+      },
+      "data": [
+        {
+          "ref_id": "A",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 300,
+            "to": 0
+          },
+          "datasource_uid": "prometheus",
+          "model": {
+            "expr": "DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) * 100",
+            "legendFormat": "",
+            "instant": false,
+            "intervalMs": 1000,
+            "maxDataPoints": 43200,
+            "refId": "A"
+          }
+        },
+        {
+          "ref_id": "B",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 300,
+            "to": 0
+          },
+          "datasource_uid": "__expr__",
+          "model": {
+            "expression": "A",
+            "type": "reduce",
+            "reducer": "last",
+            "refId": "B"
+          }
+        },
+        {
+          "ref_id": "C",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 300,
+            "to": 0
+          },
+          "datasource_uid": "__expr__",
+          "model": {
+            "expression": "B",
+            "type": "threshold",
+            "conditions": [
+              {
+                "evaluator": {
+                  "params": [
+                    95
+                  ],
+                  "type": "gt"
+                },
+                "operator": {
+                  "type": "and"
+                },
+                "query": {
+                  "params": [
+                    "B"
+                  ]
+                },
+                "reducer": {
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            ],
+            "refId": "C"
+          }
+        }
+      ]
+    },
+    {
+      "uid": "gpu_xid_errors",
+      "name": "GPUXidErrors",
+      "condition": "C",
+      "for": "0m",
+      "no_data_state": "OK",
+      "exec_err_state": "Alerting",
+      "is_paused": false,
+      "annotations": {
+        "summary": "Xid error detected on {{ $labels.instance }}. GPU error state - check nvidia-smi and dmesg.",
+        "runbook_url": "runbooks/gpu-xid-errors.md"
+      },
+      "labels": {
+        "severity": "critical",
+        "team": "gpu-ops"
+      },
+      "data": [
+        {
+          "ref_id": "A",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 60,
+            "to": 0
+          },
+          "datasource_uid": "prometheus",
+          "model": {
+            "expr": "DCGM_FI_DEV_XID_ERRORS",
+            "legendFormat": "",
+            "instant": false,
+            "intervalMs": 1000,
+            "maxDataPoints": 43200,
+            "refId": "A"
+          }
+        },
+        {
+          "ref_id": "B",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 60,
+            "to": 0
+          },
+          "datasource_uid": "__expr__",
+          "model": {
+            "expression": "A",
+            "type": "reduce",
+            "reducer": "last",
+            "refId": "B"
+          }
+        },
+        {
+          "ref_id": "C",
+          "query_type": "",
+          "relative_time_range": {
+            "from": 60,
+            "to": 0
+          },
+          "datasource_uid": "__expr__",
+          "model": {
+            "expression": "B",
+            "type": "threshold",
+            "conditions": [
+              {
+                "evaluator": {
+                  "params": [
+                    0
+                  ],
+                  "type": "gt"
+                },
+                "operator": {
+                  "type": "and"
+                },
+                "query": {
+                  "params": [
+                    "B"
+                  ]
+                },
+                "reducer": {
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            ],
+            "refId": "C"
+          }
+        }
+      ]
+    }
+  ]
+}
