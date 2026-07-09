@@ -9,7 +9,7 @@ helm upgrade gpu-operator nvidia/gpu-operator \
     --set toolkit.enabled=false \
     --set mig.enabled=false \
     --set devicePlugin.enabled=true \
-    --set devicePlugin.config.name=nvidia-device-plugin-config \
+    --set devicePlugin.config.name=time-slicing-config \
     --set devicePlugin.config.default=config \
     --set validator.driver.env[0].name=DISABLE_DEV_CHAR_SYMLINK_CREATION \
     --set-string validator.driver.env[0].value="true"
