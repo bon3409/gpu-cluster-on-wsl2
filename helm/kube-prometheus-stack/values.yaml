@@ -22,6 +22,7 @@ grafana:
 prometheus:
   enabled: true
   prometheusSpec:
+    enableRemoteWriteReceiver: true
     additionalScrapeConfigs:
       - job_name: "dcgm-exporter"
         metrics_path: '/metrics'
