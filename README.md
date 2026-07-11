@@ -29,9 +29,11 @@ WSL2 Host (Windows)
                 ├── gpu-operator
                 │    └── gpu-operator (Driver + Device Plugin)
                 ├── monitoring
-                │    └── kube-prometheus-stack
-                │         ├── Prometheus
-                │         └── Grafana (+ DCGM Dashboard)
+                │    ├── kube-prometheus-stack
+                │    │   ├── Prometheus (remoteWriteReceiver enabled)
+                │    │   └── Grafana (+ DCGM Dashboard)
+                │    └── alloy
+                │         └── alloy (DaemonSet: cAdvisor + kubelet → Prometheus)
                 ├── volcano-system
                 │    └── Volcano (Batch Scheduler)
                 └── default
@@ -70,6 +72,9 @@ WSL2 Host (Windows)
 │       ├── values.yaml           # Grafana + DCGM/Volcano scrape configs
 │       └── dashboard/
 │           └── dcgm-dashboard-configmap.yaml
+│   └── alloy/
+│       ├── install.sh            # Install Alloy
+│       └── values.yaml           # DaemonSet config: cAdvisor + kubelet → Prometheus
 │
 ├── time-slicing/
 │   └── time-slicing-config.yaml # Time-Slicing ConfigMap (replicas: 4)
@@ -107,13 +112,30 @@ kubectl apply -f 1.setup/gpu-test/gpu-test.yaml
 kubectl logs -f gpu-test
 ```
 
-### Step 5: (Optional) Install Monitoring
+### Step 5: (Optional) Install kube-prometheus-stack
 
 ```bash
 ./helm/kube-prometheus-stack/install.sh
 ```
 
-### Step 6: (Optional) Install Volcano Scheduler
+Ensure `remoteWriteReceiver: true` is set in values so Alloy can remote-write to it:
+
+```yaml
+prometheus:
+  enabled: true
+  prometheusSpec:
+    remoteWriteReceiver: true
+```
+
+### Step 6: (Optional) Install Alloy DaemonSet
+
+Collects cAdvisor and kubelet metrics from every node and forwards them to Prometheus via remote write.
+
+```bash
+./helm/alloy/install.sh
+```
+
+### Step 7: (Optional) Install Volcano Scheduler
 
 ```bash
 ./helm/volcano/install.sh
@@ -130,6 +152,20 @@ kubectl logs -f gpu-test
 ### Legacy GPU Label Customization
 
 `install-gpu-operator.sh` explicitly writes multiple labels to the `minikube` node to work around GPU Operator's assumptions about modern GPUs.
+
+### Alloy DaemonSet for Node Metrics
+
+Alloy runs as a DaemonSet on every node, collecting cAdvisor and kubelet metrics and forwarding them to Prometheus via remote write.
+
+**Config pipeline:**
+1. `discovery.kubernetes "node"` — discovers all cluster nodes (role: node)
+2. `prometheus.scrape "cadvisor"` — hits `https://<node>:10250/metrics/cadvisor` (bearer token auth, TLS skip)
+3. `prometheus.scrape "kubelet"` — hits `https://<node>:10250/metrics` (bearer token auth, TLS skip)
+4. `prometheus.remote_write "prometheus"` — streams to Prometheus via `http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write`
+
+**RBAC:** The chart's built-in ClusterRole already grants `nodes`, `nodes/pods`, and `/metrics` access — no extra permissions needed.
+
+**`insecure_skip_verify = true`** is used because minikube's kubelet uses a self-signed certificate. For production, use the cluster CA instead.
 
 ### Volcano Gang Scheduling
 
