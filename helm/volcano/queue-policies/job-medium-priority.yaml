@@ -1,0 +1,23 @@
+apiVersion: batch.volcano.sh/v1alpha1
+kind: Job
+metadata:
+  name: job-medium-priority
+  namespace: default
+spec:
+  minAvailable: 1
+  schedulerName: volcano
+  queue: medium-priority
+  ttlSecondsAfterFinished: 60
+  tasks:
+    - replicas: 4
+      name: gpu-task
+      template:
+        spec:
+          containers:
+            - name: gpu-burn
+              image: tensorflow/tensorflow:2.5.0-gpu
+              command: ["python", "-c", "print('MEDIUM priority job running'); import time; time.sleep(10)"]
+              resources:
+                limits:
+                  nvidia.com/gpu: 2
+          restartPolicy: Never

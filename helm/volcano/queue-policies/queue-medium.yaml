@@ -1,0 +1,10 @@
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: Queue
+metadata:
+  name: medium-priority
+spec:
+  weight: 5
+  priority: 500
+  reclaimable: true
+  capability:
+    nvidia.com/gpu: 4

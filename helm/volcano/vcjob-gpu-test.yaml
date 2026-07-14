@@ -6,6 +6,7 @@ metadata:
 spec:
   minAvailable: 1
   schedulerName: volcano
+  ttlSecondsAfterFinished: 60
   # If you omit the 'queue' field, the 'default' queue will be used.
   # queue: default
   policies:
