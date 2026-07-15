@@ -54,17 +54,9 @@ sleep 5
 kubectl get podgroup -n $NAMESPACE
 kubectl get pods -n $NAMESPACE -o wide
 
-# Step 3: Submit HIGH priority job while low is running
-# echo ""
-# echo "=== Step 3: Submit HIGH and Medium priority job (4 replicas, minAvailable=4) ==="
-# kubectl apply -f "$SCRIPT_DIR/job-high-priority.yaml" -f "$SCRIPT_DIR/job-medium-priority.yaml"
-
-# echo "Waiting for scheduling decision..."
-# sleep 5
-
-# Step 4: Observe results
+# Step 3: Observe results
 echo ""
-echo "=== Step 4: Results ==="
+echo "=== Step 3: Results ==="
 echo ""
 echo "=== PodGroups ==="
 kubectl get podgroup -n $NAMESPACE
