@@ -1,10 +1,13 @@
 #/bin/sh
 
+NVIDIA_GPU_OPERATOR_HELM_CHART_VERSION="26.3.3"
+
 kubectl delete -f time-slicing-config.yaml
 
 helm upgrade gpu-operator nvidia/gpu-operator \
     -n gpu-operator \
     --create-namespace \
+    --version $NVIDIA_GPU_OPERATOR_HELM_CHART_VERSION \
     --set driver.enabled=false \
     --set toolkit.enabled=false \
     --set mig.enabled=false \

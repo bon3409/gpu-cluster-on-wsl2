@@ -24,7 +24,6 @@ data:
         },
         "annotations": {
           "grafana.app/createdBy": "access-policy:service",
-          "grafana.app/folder": "afp0j47f5dv5sa",
           "grafana.app/managedBy": "classic-file-provisioning",
           "grafana.app/managerAllowsEdits": "true",
           "grafana.app/managerId": "sidecarProvider",

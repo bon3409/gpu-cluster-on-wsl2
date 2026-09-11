@@ -1,5 +1,5 @@
 #/bin/sh
 
-export CPUS=
+export CPUS=4
 export MEMORY=8192
 minikube start --driver=docker --gpus all --cpus=$CPUS --memory=$MEMORY -p minikube
