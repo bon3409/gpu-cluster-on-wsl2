@@ -170,3 +170,26 @@ Alloy runs as a DaemonSet on every node, collecting cAdvisor and kubelet metrics
 ### Volcano Gang Scheduling
 
 Volcano provides gang scheduling for batch jobs, ensuring all replicas must succeed simultaneously before any can start, preventing partial GPU resource allocation.
+
+---
+
+## ArgoCD Integration
+
+**Setup Steps** (run locally or in CI):
+
+```bash
+# 1. Create Application
+argocd app create {app_name} \
+  --repo https://github.com/bon3409/gpu-cluster-on-wsl2.git \
+  --path {directory_path} \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace default \
+  --server localhost:8080 \
+  --insecure
+
+# 2. Sync from Local Files (fast iteration, no git push needed)
+argocd app sync {app_name} --local {directory_path}
+
+# 3. Or normal Git-based sync
+argocd app sync {app_name}
+```
