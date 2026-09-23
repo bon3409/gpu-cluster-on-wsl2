@@ -52,8 +52,13 @@ WSL2 Host (Windows)
 │   └── install-nvidia-container-toolkit.sh
 │
 ├── 1.setup/                    # K8s cluster setup
-│   ├── minikube.sh              # Start minikube (--driver=docker --gpus all)
+│   ├── minikube.sh              # Start minikube (--driver=docker --gpus all, --mount data)
 │   ├── install-gpu-operator.sh  # Install GPU Operator + custom node labels
+│   ├── data/
+│   │   └── model_repository/    # Model assets (synced to minikube VM via --mount)
+│   │       ├── densenet_onnx/
+│   │       ├── resnet50/
+│   │       └── mobilenetv2/
 │   └── gpu-test/
 │       ├── gpu-test.yaml        # Basic CUDA vectoradd Pod
 │       ├── gpu-burn-30s.yaml    # GPU stress test Pod (COMPUTE=61)
@@ -67,18 +72,49 @@ WSL2 Host (Windows)
 │   │   ├── volcano-job-gpu.yaml  # Volcano Job (TensorFlow, 2 replicas)
 │   │   ├── dashboard.yaml        # Volcano Dashboard
 │   │   └── README.md
-│   └── kube-prometheus-stack/
-│       ├── install.sh            # Install Prometheus + Grafana
-│       ├── values.yaml           # Grafana + DCGM/Volcano scrape configs
-│       └── dashboard/
-│           └── dcgm-dashboard-configmap.yaml
+│   ├── kube-prometheus-stack/
+│   │   ├── install.sh            # Install Prometheus + Grafana
+│   │   ├── values.yaml           # Grafana + DCGM/Volcano scrape configs
+│   │   └── dashboard/
+│   │       └── dcgm-dashboard-configmap.yaml
 │   └── alloy/
 │       ├── install.sh            # Install Alloy
 │       └── values.yaml           # DaemonSet config: cAdvisor + kubelet → Prometheus
 │
 ├── time-slicing/
-│   └── time-slicing-config.yaml # Time-Slicing ConfigMap (replicas: 4)
+│   ├── time-slicing-config.yaml # Time-Slicing ConfigMap (replicas: 4)
 │   └── enable-time-slicing.sh   # Enable Time-Slicing feature
+│
+├── terraform/
+│   ├── argoCD/                  # ArgoCD Helm deployment via Terraform
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── provider.tf
+│   │   ├── outputs.tf
+│   │   └── scripts/argocd-cli-installation.sh
+│   │
+│   ├── grafana/                 # Grafana alerting & notification config via Terraform
+│   │   ├── provider.tf
+│   │   ├── variables.tf
+│   │   ├── locals.tf
+│   │   ├── rules.tf             # Alert rule groups (DCGM GPU alerts)
+│   │   ├── contact_points.tf    # Email contact points (default/warning/critical)
+│   │   ├── outputs.tf
+│   │   └── rules/dcgm.json      # DCGM alert rule definitions
+│   │
+│   └── triton/                  # Triton Inference Server deployment
+│       ├── main.tf
+│       ├── chart/
+│       │   ├── Chart.yaml
+│       │   ├── values.yaml
+│       │   └── templates/
+│       ├── model_repository/    # Model configs (symlinked from 1.setup/data/)
+│       │   └── densenet_onnx/
+│       │       ├── config.pbtxt
+│       │       └── 1/model.onnx
+│       └── example/
+│           ├── densenet_onnx_mock.yaml      # Mock tensor test Job
+│           └── densenet_sea_lion_test.yaml  # Real image inference test Job
 ```
 
 ---
