@@ -104,14 +104,12 @@ WSL2 Host (Windows)
 │   │
 │   └── triton/                  # Triton Inference Server deployment
 │       ├── main.tf
+│       ├── provider.tf
+│       ├── variables.tf
 │       ├── chart/
 │       │   ├── Chart.yaml
 │       │   ├── values.yaml
 │       │   └── templates/
-│       ├── model_repository/    # Model configs (symlinked from 1.setup/data/)
-│       │   └── densenet_onnx/
-│       │       ├── config.pbtxt
-│       │       └── 1/model.onnx
 │       └── example/
 │           ├── densenet_onnx_mock.yaml      # Mock tensor test Job
 │           └── densenet_sea_lion_test.yaml  # Real image inference test Job
