@@ -1,0 +1,206 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: triton-client-script
+  namespace: triton
+data:
+  client.py: |
+    import json
+    import math
+    import time
+    import urllib.request
+    import urllib.error
+
+    TRITON_URL = "http://triton-server-service.triton.svc.cluster.local:8000"
+    MODEL_NAME = "densenet_onnx"
+
+    def get(url):
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return response.status
+
+    def post(url, body):
+        data = json.dumps(body).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read().decode())
+
+    print("=== Triton Client Job ===")
+    print(f"Triton URL : {TRITON_URL}")
+    print(f"Model      : {MODEL_NAME}")
+
+    # ------------------------------------------------------------
+    # 1. Wait for Triton server readiness
+    # ------------------------------------------------------------
+    print("\n[1] Waiting for Triton server...")
+
+    for i in range(60):
+        try:
+            status = get(f"{TRITON_URL}/v2/health/ready")
+
+            if status == 200:
+                print("Triton server is READY")
+                break
+
+            print(f"Triton returned HTTP {status}")
+
+        except Exception as e:
+            print(f"Connection failed: {type(e).__name__}: {e}")
+
+        print(f"Waiting... ({i + 1}/60)")
+        time.sleep(2)
+    else:
+        raise RuntimeError("Triton server is not ready")
+
+    # ------------------------------------------------------------
+    # 2. Check model readiness
+    # ------------------------------------------------------------
+    print("\n[2] Checking model readiness...")
+
+    status = get(
+        f"{TRITON_URL}/v2/models/{MODEL_NAME}/ready"
+    )
+
+    if status != 200:
+        raise RuntimeError(
+            f"Model {MODEL_NAME} is not ready, HTTP {status}"
+        )
+
+    print(f"Model {MODEL_NAME} is READY")
+
+    # ------------------------------------------------------------
+    # 3. Create test input
+    # ------------------------------------------------------------
+    print("\n[3] Creating test tensor...")
+
+    # Model input:
+    # [1, 3, 224, 224]
+    #
+    # 1       = batch
+    # 3       = RGB
+    # 224x224 = image
+    #
+    # 150,528 FP32 values
+    data = [0.0] * (1 * 3 * 224 * 224)
+
+    request_body = {
+        "inputs": [
+            {
+                "name": "data_0",
+                "shape": [1, 3, 224, 224],
+                "datatype": "FP32",
+                "data": data,
+            }
+        ]
+    }
+
+    print("Input shape: [1, 3, 224, 224]")
+
+    # ------------------------------------------------------------
+    # 4. Call Triton inference API
+    # ------------------------------------------------------------
+    print("\n[4] Calling Triton inference API...")
+
+    response = post(
+        f"{TRITON_URL}/v2/models/{MODEL_NAME}/infer",
+        request_body,
+    )
+
+    # ------------------------------------------------------------
+    # 5. Parse response
+    # ------------------------------------------------------------
+    output = response["outputs"][0]
+
+    print(f"Output name : {output['name']}")
+    print(f"Output shape: {output['shape']}")
+    print(f"Datatype    : {output['datatype']}")
+
+    scores = output["data"]
+
+    print(f"Number of output values: {len(scores)}")
+
+    # ------------------------------------------------------------
+    # 6. Softmax
+    # ------------------------------------------------------------
+    max_score = max(scores)
+
+    exp_scores = [
+        math.exp(score - max_score)
+        for score in scores
+    ]
+
+    total = sum(exp_scores)
+
+    probabilities = [
+        value / total
+        for value in exp_scores
+    ]
+
+    # ------------------------------------------------------------
+    # 7. Find Top-1 prediction
+    # ------------------------------------------------------------
+    class_id = max(
+        range(len(probabilities)),
+        key=probabilities.__getitem__
+    )
+
+    confidence = probabilities[class_id]
+
+    print("\n=== Prediction ===")
+    print(f"class_id   : {class_id}")
+    print(f"confidence : {confidence:.6f}")
+
+    # ------------------------------------------------------------
+    # 8. Show Top-5
+    # ------------------------------------------------------------
+    top5 = sorted(
+        enumerate(probabilities),
+        key=lambda x: x[1],
+        reverse=True,
+    )[:5]
+
+    print("\n=== Top-5 ===")
+
+    for class_id, probability in top5:
+        print(
+            f"class {class_id:4d} "
+            f"probability={probability:.6f}"
+        )
+
+    print("\nInference test PASSED")
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: triton-inference-test
+  namespace: triton
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 300
+
+  template:
+    spec:
+      restartPolicy: Never
+
+      containers:
+        - name: triton-client
+          image: python:3.12-alpine
+          command:
+            - python
+            - /app/client.py
+
+          volumeMounts:
+            - name: client-script
+              mountPath: /app
+
+      volumes:
+        - name: client-script
+          configMap:
+            name: triton-client-script

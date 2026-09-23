@@ -1,0 +1,490 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: densenet-assets-pv
+spec:
+  capacity:
+    storage: 1Gi
+
+  accessModes:
+    - ReadOnlyMany
+
+  persistentVolumeReclaimPolicy: Retain
+
+  storageClassName: densenet-local
+
+  hostPath:
+    path: /mnt/data/model_repository/densenet_onnx
+    type: Directory
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: densenet-assets-pvc
+  namespace: triton
+spec:
+  accessModes:
+    - ReadOnlyMany
+
+  storageClassName: densenet-local
+
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: densenet-inference-client
+  namespace: triton
+data:
+  client.py: |
+    import json
+    import math
+    import sys
+    import time
+    import urllib.request
+
+    from PIL import Image
+
+
+    TRITON_URL = (
+        "http://triton-server-service.triton.svc.cluster.local:8000"
+    )
+
+    MODEL_NAME = "densenet_onnx"
+
+    IMAGE_PATH = "/data/sea_lion.jpg"
+    LABEL_PATH = "/data/synset.txt"
+
+    EXPECTED_SYNSET = "n02077923"
+
+
+    # ------------------------------------------------------------
+    # HTTP GET
+    # ------------------------------------------------------------
+
+    def http_get(url):
+        req = urllib.request.Request(url, method="GET")
+
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return response.status
+
+
+    # ------------------------------------------------------------
+    # HTTP POST
+    # ------------------------------------------------------------
+
+    def http_post(url, payload):
+        body = json.dumps(payload).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        with urllib.request.urlopen(req, timeout=60) as response:
+            return json.loads(
+                response.read().decode("utf-8")
+            )
+
+
+    # ------------------------------------------------------------
+    # Wait for Triton
+    # ------------------------------------------------------------
+
+    print("=== Triton DenseNet Integration Test ===")
+
+    print(f"Triton URL : {TRITON_URL}")
+    print(f"Model      : {MODEL_NAME}")
+    print(f"Image      : {IMAGE_PATH}")
+    print(f"Expected   : {EXPECTED_SYNSET}")
+
+
+    print("\n[1] Checking Triton readiness...")
+
+    for i in range(30):
+        try:
+            status = http_get(
+                f"{TRITON_URL}/v2/health/ready"
+            )
+
+            if status == 200:
+                print("Triton server is READY")
+                break
+
+        except Exception as e:
+            print(
+                f"Waiting for Triton: {type(e).__name__}: {e}"
+            )
+
+        time.sleep(2)
+
+    else:
+        print("ERROR: Triton server is not ready")
+        sys.exit(1)
+
+
+    # ------------------------------------------------------------
+    # Model readiness
+    # ------------------------------------------------------------
+
+    print("\n[2] Checking model readiness...")
+
+    try:
+        status = http_get(
+            f"{TRITON_URL}/v2/models/{MODEL_NAME}/ready"
+        )
+
+        if status != 200:
+            print(
+                f"ERROR: model returned HTTP {status}"
+            )
+            sys.exit(1)
+
+    except Exception as e:
+        print(
+            f"ERROR: model readiness failed: {e}"
+        )
+        sys.exit(1)
+
+    print(f"Model {MODEL_NAME} is READY")
+
+
+    # ------------------------------------------------------------
+    # Load labels
+    # ------------------------------------------------------------
+
+    print("\n[3] Loading ImageNet labels...")
+
+    with open(LABEL_PATH, "r") as f:
+        labels = [
+            line.strip()
+            for line in f
+            if line.strip()
+        ]
+
+
+    print(f"Loaded labels: {len(labels)}")
+
+
+    expected_class_id = None
+
+    for index, label in enumerate(labels):
+
+        synset_id = label.split()[0]
+
+        if synset_id == EXPECTED_SYNSET:
+            expected_class_id = index
+            break
+
+
+    if expected_class_id is None:
+        print(
+            f"ERROR: {EXPECTED_SYNSET} "
+            "not found in synset.txt"
+        )
+        sys.exit(1)
+
+
+    print(
+        f"Expected class_id: {expected_class_id}"
+    )
+
+
+    # ------------------------------------------------------------
+    # Load image
+    # ------------------------------------------------------------
+
+    print("\n[4] Loading image...")
+
+    image = Image.open(IMAGE_PATH).convert("RGB")
+
+    print(
+        f"Original image size: {image.size}"
+    )
+
+
+    # ------------------------------------------------------------
+    # DenseNet preprocessing
+    #
+    # ONNX Model Zoo example:
+    #
+    # RGB
+    # ↓
+    # resize 256x256
+    # ↓
+    # center crop 224x224
+    # ↓
+    # /255
+    # ↓
+    # ImageNet normalize
+    # ↓
+    # HWC -> CHW
+    # ↓
+    # add batch dimension
+    # ------------------------------------------------------------
+
+    print("\n[5] Preprocessing image...")
+
+    image = image.resize(
+        (256, 256),
+        Image.Resampling.BILINEAR,
+    )
+
+    image = image.crop(
+        (16, 16, 240, 240)
+    )
+
+    print(
+        f"Model image size: {image.size}"
+    )
+
+
+    pixels = list(image.getdata())
+
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+
+    tensor = []
+
+    # HWC -> CHW
+    for channel in range(3):
+
+        for pixel in pixels:
+
+            value = (
+                pixel[channel] / 255.0
+            )
+
+            value = (
+                value - mean[channel]
+            ) / std[channel]
+
+            tensor.append(float(value))
+
+
+    print(
+        f"Tensor values: {len(tensor)}"
+    )
+
+    print(
+        "Tensor shape: [1, 3, 224, 224]"
+    )
+
+
+    # ------------------------------------------------------------
+    # Triton request
+    # ------------------------------------------------------------
+
+    request = {
+        "inputs": [
+            {
+                "name": "data_0",
+                "shape": [1, 3, 224, 224],
+                "datatype": "FP32",
+                "data": tensor,
+            }
+        ]
+    }
+
+
+    # ------------------------------------------------------------
+    # Inference
+    # ------------------------------------------------------------
+
+    print("\n[6] Calling Triton inference API...")
+
+    response = http_post(
+        f"{TRITON_URL}/v2/models/{MODEL_NAME}/infer",
+        request,
+    )
+
+
+    output = response["outputs"][0]
+
+    scores = output["data"]
+
+    print(
+        f"Output name : {output['name']}"
+    )
+
+    print(
+        f"Output shape: {output['shape']}"
+    )
+
+    print(
+        f"Output count: {len(scores)}"
+    )
+
+
+    # ------------------------------------------------------------
+    # Softmax
+    # ------------------------------------------------------------
+
+    print("\n[7] Calculating probabilities...")
+
+    max_score = max(scores)
+
+    exp_scores = [
+        math.exp(score - max_score)
+        for score in scores
+    ]
+
+    total = sum(exp_scores)
+
+    probabilities = [
+        score / total
+        for score in exp_scores
+    ]
+
+
+    # ------------------------------------------------------------
+    # Top-5
+    # ------------------------------------------------------------
+
+    top5 = sorted(
+        enumerate(probabilities),
+        key=lambda item: item[1],
+        reverse=True,
+    )[:5]
+
+
+    print("\n=== Top-5 Predictions ===")
+
+    for class_id, probability in top5:
+
+        label = labels[class_id]
+
+        print(
+            f"{class_id:4d} "
+            f"{probability:.6f} "
+            f"{label}"
+        )
+
+
+    # ------------------------------------------------------------
+    # Top-1
+    # ------------------------------------------------------------
+
+    predicted_class_id = top5[0][0]
+    confidence = top5[0][1]
+
+    predicted_label = labels[predicted_class_id]
+
+    predicted_synset = (
+        predicted_label.split()[0]
+    )
+
+
+    print("\n=== Prediction ===")
+
+    print(
+        f"class_id   : {predicted_class_id}"
+    )
+
+    print(
+        f"synset     : {predicted_synset}"
+    )
+
+    print(
+        f"label      : {predicted_label}"
+    )
+
+    print(
+        f"confidence : {confidence:.6f}"
+    )
+
+
+    # ------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------
+
+    print("\n=== Validation ===")
+
+    print(
+        f"Expected class_id : {expected_class_id}"
+    )
+
+    print(
+        f"Predicted class_id: {predicted_class_id}"
+    )
+
+    print(
+        f"Expected synset   : {EXPECTED_SYNSET}"
+    )
+
+    print(
+        f"Predicted synset  : {predicted_synset}"
+    )
+
+
+    if predicted_synset == EXPECTED_SYNSET:
+
+        print(
+            "\n✅ PASS: "
+            "DenseNet correctly predicted sea lion."
+        )
+
+        sys.exit(0)
+
+
+    print(
+        "\n❌ FAIL: "
+        "Top-1 prediction is not sea lion."
+    )
+
+    sys.exit(2)
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: densenet-sea-lion-test
+  namespace: triton
+spec:
+  backoffLimit: 0
+
+  ttlSecondsAfterFinished: 300
+
+  template:
+    spec:
+      restartPolicy: Never
+
+      containers:
+        - name: densenet-client
+
+          image: python:3.12-slim
+
+          command:
+            - /bin/sh
+            - -c
+            - |
+              pip install --no-cache-dir Pillow
+              python /app/client.py
+
+          volumeMounts:
+
+            - name: densenet-assets
+              mountPath: /data
+              readOnly: true
+
+            - name: client-script
+              mountPath: /app
+              readOnly: true
+
+      volumes:
+
+        - name: densenet-assets
+          persistentVolumeClaim:
+            claimName: densenet-assets-pvc
+
+        - name: client-script
+          configMap:
+            name: densenet-inference-client

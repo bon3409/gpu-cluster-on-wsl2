@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .Release.Name }}-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: model-hostpath
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: {{ .Values.modelRepository.hostPath | quote }}
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: model-hostpath
+  resources:
+    requests:
+      storage: 1Gi

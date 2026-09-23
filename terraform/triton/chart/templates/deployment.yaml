@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: tritonserver
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - tritonserver
+            - --model-repository={{ .Values.modelRepository.mountPath }}
+            - --strict-model-config=false
+          ports:
+            - containerPort: {{ .Values.service.httpPort }}
+            - containerPort: {{ .Values.service.grpcPort }}
+            - containerPort: {{ .Values.service.metricsPort }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: {{ .Values.modelRepository.mountPath }}
+              name: model-storage
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-pvc
