@@ -450,8 +450,7 @@ metadata:
   namespace: triton
 spec:
   backoffLimit: 0
-
-  ttlSecondsAfterFinished: 300
+  ttlSecondsAfterFinished: 30
 
   template:
     spec:
