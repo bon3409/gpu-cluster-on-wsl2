@@ -36,3 +36,9 @@ prometheus:
         static_configs:
           - targets:
             - volcano-scheduler-service.volcano-system.svc.cluster.local:8080
+      - job_name: "triton-server"
+        metrics_path: '/metrics'
+        scrape_interval: 30s
+        static_configs:
+          - targets:
+            - triton-server-service.triton.svc.cluster.local:8002

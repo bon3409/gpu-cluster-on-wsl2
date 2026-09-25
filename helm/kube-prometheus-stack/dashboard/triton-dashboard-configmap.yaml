@@ -1,0 +1,2816 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: triton-dashboard-configmap
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "nvidia"
+data:
+  triton-dashboard.json: |-
+    {
+      "apiVersion": "dashboard.grafana.app/v2",
+      "kind": "Dashboard",
+      "metadata": {
+        "name": "triton-inference-gpu",
+        "namespace": "default",
+        "uid": "4de5c42c-906a-4996-9d55-424e13769dc6",
+        "resourceVersion": "1790352046553988",
+        "generation": 1,
+        "creationTimestamp": "2026-09-25T16:00:46Z",
+        "labels": {
+          "grafana.app/deprecatedInternalID": "331456388276224"
+        },
+        "annotations": {
+          "grafana.app/createdBy": "user:bfyxoxaeawnb4d",
+          "grafana.app/folder": "afyxoxlwp28e8e",
+          "grafana.app/saved-from-ui": "Grafana v13.0.1+security-01 (9bbe672d)",
+          "grafana.app/folderTitle": "nvidia",
+          "grafana.app/folderUrl": "/dashboards/f/afyxoxlwp28e8e/nvidia"
+        }
+      },
+      "spec": {
+        "annotations": [
+          {
+            "kind": "AnnotationQuery",
+            "spec": {
+              "query": {
+                "kind": "DataQuery",
+                "group": "grafana",
+                "version": "v0",
+                "datasource": {
+                  "name": "-- Grafana --"
+                },
+                "spec": {}
+              },
+              "enable": true,
+              "hide": true,
+              "iconColor": "rgba(0, 211, 255, 1)",
+              "name": "Annotations & Alerts",
+              "builtIn": true,
+              "legacyOptions": {
+                "type": "dashboard"
+              }
+            }
+          }
+        ],
+        "cursorSync": "Crosshair",
+        "editable": true,
+        "elements": {
+          "panel-1": {
+            "kind": "Panel",
+            "spec": {
+              "id": 1,
+              "title": "Dashboard scope",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "text",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "content": "This dashboard monitors Triton model serving using the Prometheus metrics exposed by Triton.\n\n**Key concepts**\n- `nv_inference_request_success`: successful client requests\n- `nv_inference_count`: individual inferences, including work performed inside batches\n- `nv_inference_exec_count`: backend model executions\n- Average batch size ≈ `inference_count / exec_count`\n- Latency counters are cumulative microseconds, so panels use `rate()` and convert to milliseconds\n- GPU utilization and memory are instantaneous gauges",
+                    "mode": "markdown"
+                  },
+                  "fieldConfig": {
+                    "defaults": {},
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-10": {
+            "kind": "Panel",
+            "spec": {
+              "id": 10,
+              "title": "Average Effective Batch Size",
+              "description": "Approximate effective batch size. Values above 1 indicate batching is combining multiple inference requests into model executions.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_count{version=~\"$version\"}[$__rate_interval])) / clamp_min(sum by (model) (rate(nv_inference_exec_count{version=~\"$version\"}[$__rate_interval])), 1e-9)",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} avg batch",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "decimals": 2,
+                      "min": 1,
+                      "max": 8,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-11": {
+            "kind": "Panel",
+            "spec": {
+              "id": 11,
+              "title": "Inference vs Model Execution Rate",
+              "description": "A wide gap between inference rate and execution rate is expected when Dynamic Batching is effective.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_count{version=~\"$version\"}[$__rate_interval]))",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} inferences/s",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    },
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_exec_count{version=~\"$version\"}[$__rate_interval]))",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} executions/s",
+                            "range": true
+                          }
+                        },
+                        "refId": "B",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "reqps",
+                      "decimals": 2,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-12": {
+            "kind": "Panel",
+            "spec": {
+              "id": 12,
+              "title": "Pending Requests / Queue Depth",
+              "description": "Instantaneous requests waiting for backend execution. Sustained growth can indicate insufficient inference capacity or queue delay.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (nv_inference_pending_request_count{version=~\"$version\"})",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} pending",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "decimals": 0,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-13": {
+            "kind": "Panel",
+            "spec": {
+              "id": 13,
+              "title": "Dynamic Batching: Backend Executions by Model",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_exec_count{version=~\"$version\"}[$__rate_interval]))",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} executions/s",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "execs/s",
+                      "decimals": 2,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-15": {
+            "kind": "Panel",
+            "spec": {
+              "id": 15,
+              "title": "Average End-to-End Request Latency",
+              "description": "Average request duration derived from cumulative request-duration microseconds divided by successful request rate.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_request_duration_us{version=~\"$version\"}[$__rate_interval])) / clamp_min(sum by (model) (rate(nv_inference_request_success{version=~\"$version\"}[$__rate_interval])), 1e-9) / 1000",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} ms",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "ms",
+                      "decimals": 2,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-16": {
+            "kind": "Panel",
+            "spec": {
+              "id": 16,
+              "title": "Average Queue Latency",
+              "description": "Average time spent waiting in Triton scheduling queues per successful request.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_queue_duration_us{version=~\"$version\"}[$__rate_interval])) / clamp_min(sum by (model) (rate(nv_inference_request_success{version=~\"$version\"}[$__rate_interval])), 1e-9) / 1000",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} ms",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "ms",
+                      "decimals": 2,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-17": {
+            "kind": "Panel",
+            "spec": {
+              "id": 17,
+              "title": "Average Compute Time per Backend Execution",
+              "description": "Backend compute durations are per model execution. With batching enabled, one execution may process multiple requests.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_compute_infer_duration_us{version=~\"$version\"}[$__rate_interval])) / clamp_min(sum by (model) (rate(nv_inference_exec_count{version=~\"$version\"}[$__rate_interval])), 1e-9) / 1000",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} infer ms",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    },
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_compute_input_duration_us{version=~\"$version\"}[$__rate_interval])) / clamp_min(sum by (model) (rate(nv_inference_exec_count{version=~\"$version\"}[$__rate_interval])), 1e-9) / 1000",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} input ms",
+                            "range": true
+                          }
+                        },
+                        "refId": "B",
+                        "hidden": false
+                      }
+                    },
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_compute_output_duration_us{version=~\"$version\"}[$__rate_interval])) / clamp_min(sum by (model) (rate(nv_inference_exec_count{version=~\"$version\"}[$__rate_interval])), 1e-9) / 1000",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} output ms",
+                            "range": true
+                          }
+                        },
+                        "refId": "C",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "ms",
+                      "decimals": 2,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-19": {
+            "kind": "Panel",
+            "spec": {
+              "id": 19,
+              "title": "GPU Utilization",
+              "description": "Triton GPU utilization gauge. A value of 0% may simply reflect no active workload at scrape time.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "100 * max(nv_gpu_utilization{gpu_uuid=~\"$gpu\"})",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "gauge",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "showThresholdLabels": false,
+                    "showThresholdMarkers": true,
+                    "sizing": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percent",
+                      "decimals": 1,
+                      "min": 0,
+                      "max": 100,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 70,
+                            "color": "orange"
+                          },
+                          {
+                            "value": 90,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-20": {
+            "kind": "Panel",
+            "spec": {
+              "id": 20,
+              "title": "GPU Memory Used",
+              "description": "GPU memory pressure.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "100 * max(nv_gpu_memory_used_bytes{gpu_uuid=~\"$gpu\"}) / clamp_min(max(nv_gpu_memory_total_bytes{gpu_uuid=~\"$gpu\"}), 1)",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "gauge",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "showThresholdLabels": false,
+                    "showThresholdMarkers": true,
+                    "sizing": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percent",
+                      "decimals": 1,
+                      "min": 0,
+                      "max": 100,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 70,
+                            "color": "orange"
+                          },
+                          {
+                            "value": 90,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-21": {
+            "kind": "Panel",
+            "spec": {
+              "id": 21,
+              "title": "CPU Utilization",
+              "description": "Host CPU utilization reported by Triton.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "100 * nv_cpu_utilization",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "gauge",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "showThresholdLabels": false,
+                    "showThresholdMarkers": true,
+                    "sizing": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percent",
+                      "decimals": 1,
+                      "min": 0,
+                      "max": 100,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 70,
+                            "color": "orange"
+                          },
+                          {
+                            "value": 90,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-22": {
+            "kind": "Panel",
+            "spec": {
+              "id": 22,
+              "title": "Host RAM Used",
+              "description": "Host RAM usage reported by Triton.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "100 * nv_cpu_memory_used_bytes / clamp_min(nv_cpu_memory_total_bytes, 1)",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "gauge",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "showThresholdLabels": false,
+                    "showThresholdMarkers": true,
+                    "sizing": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percent",
+                      "decimals": 1,
+                      "min": 0,
+                      "max": 100,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 70,
+                            "color": "orange"
+                          },
+                          {
+                            "value": 90,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-23": {
+            "kind": "Panel",
+            "spec": {
+              "id": 23,
+              "title": "GPU Memory Usage",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "max(nv_gpu_memory_used_bytes{gpu_uuid=~\"$gpu\"}) / 1024 / 1024",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "used MiB",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    },
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "max(nv_gpu_memory_total_bytes{gpu_uuid=~\"$gpu\"}) / 1024 / 1024",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "total MiB",
+                            "range": true
+                          }
+                        },
+                        "refId": "B",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "MiB",
+                      "decimals": 0,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-24": {
+            "kind": "Panel",
+            "spec": {
+              "id": 24,
+              "title": "GPU Utilization Over Time",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "100 * max(nv_gpu_utilization{gpu_uuid=~\"$gpu\"})",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "GPU %",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percent",
+                      "decimals": 1,
+                      "min": 0,
+                      "max": 100,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-25": {
+            "kind": "Panel",
+            "spec": {
+              "id": 25,
+              "title": "Host CPU & Memory",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "100 * nv_cpu_utilization",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "CPU %",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    },
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "100 * nv_cpu_memory_used_bytes / clamp_min(nv_cpu_memory_total_bytes, 1)",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "RAM %",
+                            "range": true
+                          }
+                        },
+                        "refId": "B",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percent",
+                      "decimals": 1,
+                      "min": 0,
+                      "max": 100,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-26": {
+            "kind": "Panel",
+            "spec": {
+              "id": 26,
+              "title": "GPU Memory Used",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "max(nv_gpu_memory_used_bytes{gpu_uuid=~\"$gpu\"}) / 1024 / 1024",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "colorMode": "value",
+                    "graphMode": "area",
+                    "justifyMode": "auto",
+                    "orientation": "auto",
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "textMode": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "MiB",
+                      "decimals": 0,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "mode": "thresholds"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-27": {
+            "kind": "Panel",
+            "spec": {
+              "id": 27,
+              "title": "GPU Memory Total",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "max(nv_gpu_memory_total_bytes{gpu_uuid=~\"$gpu\"}) / 1024 / 1024",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "colorMode": "value",
+                    "graphMode": "area",
+                    "justifyMode": "auto",
+                    "orientation": "auto",
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "textMode": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "MiB",
+                      "decimals": 0,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "mode": "thresholds"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-29": {
+            "kind": "Panel",
+            "spec": {
+              "id": 29,
+              "title": "Current metric caveats",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "text",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "content": "- **GPU power / energy:** your supplied metrics currently report `nv_gpu_power_usage=0`, `nv_gpu_power_limit=0`, and `nv_energy_consumption=0`. The dashboard intentionally does not treat these zeros as meaningful power telemetry.\n- **Percentiles:** the supplied metrics are cumulative counters/gauges. This dashboard therefore shows rate-derived averages. If you enable Triton's optional latency histograms, you can add P95/P99 panels from histogram series.\n- **Dynamic batching:** average effective batch size is estimated as `rate(nv_inference_count) / rate(nv_inference_exec_count)`. A value near 1 means little/no server-side batching; values closer to 4 or 8 indicate more batching for your ResNet50 configuration.\n- **Counters:** cumulative totals are retained for the lifetime of the Triton process and reset when Triton restarts.",
+                    "mode": "markdown"
+                  },
+                  "fieldConfig": {
+                    "defaults": {},
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-3": {
+            "kind": "Panel",
+            "spec": {
+              "id": 3,
+              "title": "Successful Requests",
+              "description": "Cumulative successful requests since the selected Triton processes started.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum(nv_inference_request_success{model=~\"$model\",version=~\"$version\"})",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "colorMode": "value",
+                    "graphMode": "area",
+                    "justifyMode": "auto",
+                    "orientation": "auto",
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "textMode": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "decimals": 0,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "mode": "thresholds"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-4": {
+            "kind": "Panel",
+            "spec": {
+              "id": 4,
+              "title": "Failed Requests",
+              "description": "Cumulative failed requests since the selected Triton processes started.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum(nv_inference_request_failure{model=~\"$model\",version=~\"$version\"})",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "colorMode": "value",
+                    "graphMode": "area",
+                    "justifyMode": "auto",
+                    "orientation": "auto",
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "textMode": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "decimals": 0,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "mode": "thresholds"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-5": {
+            "kind": "Panel",
+            "spec": {
+              "id": 5,
+              "title": "Error Rate",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "100 * sum(rate(nv_inference_request_failure{model=~\"$model\",version=~\"$version\"}[$__rate_interval])) / clamp_min(sum(rate(nv_inference_request_success{model=~\"$model\",version=~\"$version\"}[$__rate_interval])) + sum(rate(nv_inference_request_failure{model=~\"$model\",version=~\"$version\"}[$__rate_interval])), 1e-9)",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "colorMode": "value",
+                    "graphMode": "area",
+                    "justifyMode": "auto",
+                    "orientation": "auto",
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "textMode": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percent",
+                      "decimals": 2,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "mode": "thresholds"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-6": {
+            "kind": "Panel",
+            "spec": {
+              "id": 6,
+              "title": "Request Rate",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum(rate(nv_inference_request_success{model=~\"$model\",version=~\"$version\"}[$__rate_interval]))",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "Value",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "colorMode": "value",
+                    "graphMode": "area",
+                    "justifyMode": "auto",
+                    "orientation": "auto",
+                    "reduceOptions": {
+                      "calcs": [
+                        "lastNotNull"
+                      ],
+                      "fields": "",
+                      "values": false
+                    },
+                    "textMode": "auto"
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "reqps",
+                      "decimals": 2,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "mode": "thresholds"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-7": {
+            "kind": "Panel",
+            "spec": {
+              "id": 7,
+              "title": "Inference Request Rate by Model",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_request_success{version=~\"$version\"}[$__rate_interval]))",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} req/s",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "reqps",
+                      "decimals": 2,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "panel-8": {
+            "kind": "Panel",
+            "spec": {
+              "id": 8,
+              "title": "Inference Failure Rate by Model",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "prometheus"
+                          },
+                          "spec": {
+                            "expr": "sum by (model) (rate(nv_inference_request_failure{version=~\"$version\"}[$__rate_interval]))",
+                            "format": "time_series",
+                            "instant": false,
+                            "legendFormat": "{{model}} failures/s",
+                            "range": true
+                          }
+                        },
+                        "refId": "A",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                      ],
+                      "displayMode": "table",
+                      "placement": "bottom",
+                      "showLegend": true
+                    },
+                    "tooltip": {
+                      "hideZeros": true,
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "reqps",
+                      "decimals": 2,
+                      "color": {
+                        "mode": "palette-classic"
+                      },
+                      "custom": {
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                          "legend": false,
+                          "tooltip": false,
+                          "viz": false
+                        },
+                        "lineInterpolation": "linear",
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                          "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                          "group": "A",
+                          "mode": "none"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          }
+        },
+        "layout": {
+          "kind": "RowsLayout",
+          "spec": {
+            "rows": [
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "",
+                  "collapse": false,
+                  "hideHeader": true,
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 24,
+                            "height": 5,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-1"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "Traffic & Errors",
+                  "collapse": false,
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 6,
+                            "height": 5,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-3"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 6,
+                            "y": 0,
+                            "width": 6,
+                            "height": 5,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-4"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 0,
+                            "width": 6,
+                            "height": 5,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-5"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 18,
+                            "y": 0,
+                            "width": 6,
+                            "height": 5,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-6"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 5,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-7"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 5,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-8"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "Dynamic Batching & Queue",
+                  "collapse": false,
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-10"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 0,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-11"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 8,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-12"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 8,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-13"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "Inference Latency",
+                  "collapse": false,
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-15"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 0,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-16"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 8,
+                            "width": 24,
+                            "height": 9,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-17"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "GPU & Host Resource Utilization",
+                  "collapse": false,
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 6,
+                            "height": 6,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-19"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 6,
+                            "y": 0,
+                            "width": 6,
+                            "height": 6,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-20"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 0,
+                            "width": 6,
+                            "height": 6,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-21"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 18,
+                            "y": 0,
+                            "width": 6,
+                            "height": 6,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-22"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 6,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-23"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 6,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-24"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 14,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-25"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 14,
+                            "width": 6,
+                            "height": 5,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-26"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 18,
+                            "y": 14,
+                            "width": 6,
+                            "height": 5,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-27"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "Operational Notes",
+                  "collapse": false,
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 24,
+                            "height": 7,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "panel-29"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "links": [],
+        "liveNow": false,
+        "preload": false,
+        "tags": [
+          "triton",
+          "nvidia",
+          "inference",
+          "prometheus",
+          "gpu"
+        ],
+        "timeSettings": {
+          "timezone": "browser",
+          "from": "now-30m",
+          "to": "now",
+          "autoRefresh": "",
+          "autoRefreshIntervals": [
+            "5s",
+            "10s",
+            "30s",
+            "1m",
+            "5m",
+            "15m"
+          ],
+          "hideTimepicker": false,
+          "fiscalYearStartMonth": 0
+        },
+        "title": "Triton Inference Server - Model & GPU",
+        "variables": [
+          {
+            "kind": "QueryVariable",
+            "spec": {
+              "name": "model",
+              "current": {
+                "text": "All",
+                "value": [
+                  "$__all"
+                ]
+              },
+              "label": "Model",
+              "hide": "dontHide",
+              "refresh": "onDashboardLoad",
+              "skipUrlSync": false,
+              "query": {
+                "kind": "DataQuery",
+                "group": "prometheus",
+                "version": "v0",
+                "datasource": {
+                  "name": "prometheus"
+                },
+                "spec": {
+                  "query": "label_values(nv_inference_count, model)",
+                  "refId": "StandardVariableQuery"
+                }
+              },
+              "regex": "",
+              "sort": "alphabeticalAsc",
+              "definition": "label_values(nv_inference_count, model)",
+              "options": [],
+              "multi": true,
+              "includeAll": true,
+              "allValue": ".*",
+              "allowCustomValue": true
+            }
+          },
+          {
+            "kind": "QueryVariable",
+            "spec": {
+              "name": "version",
+              "current": {
+                "text": "All",
+                "value": [
+                  "$__all"
+                ]
+              },
+              "label": "Version",
+              "hide": "dontHide",
+              "refresh": "onDashboardLoad",
+              "skipUrlSync": false,
+              "query": {
+                "kind": "DataQuery",
+                "group": "prometheus",
+                "version": "v0",
+                "datasource": {
+                  "name": "prometheus"
+                },
+                "spec": {
+                  "query": "label_values(nv_inference_count{model=~\"$model\"}, version)",
+                  "refId": "StandardVariableQuery"
+                }
+              },
+              "regex": "",
+              "sort": "alphabeticalAsc",
+              "definition": "label_values(nv_inference_count{model=~\"$model\"}, version)",
+              "options": [],
+              "multi": true,
+              "includeAll": true,
+              "allValue": ".*",
+              "allowCustomValue": true
+            }
+          },
+          {
+            "kind": "QueryVariable",
+            "spec": {
+              "name": "gpu",
+              "current": {
+                "text": "All",
+                "value": [
+                  "$__all"
+                ]
+              },
+              "label": "GPU",
+              "hide": "dontHide",
+              "refresh": "onDashboardLoad",
+              "skipUrlSync": false,
+              "query": {
+                "kind": "DataQuery",
+                "group": "prometheus",
+                "version": "v0",
+                "datasource": {
+                  "name": "prometheus"
+                },
+                "spec": {
+                  "query": "label_values(nv_gpu_utilization, gpu_uuid)",
+                  "refId": "StandardVariableQuery"
+                }
+              },
+              "regex": "",
+              "sort": "alphabeticalAsc",
+              "definition": "label_values(nv_gpu_utilization, gpu_uuid)",
+              "options": [],
+              "multi": true,
+              "includeAll": true,
+              "allValue": ".*",
+              "allowCustomValue": true
+            }
+          }
+        ]
+      }
+    }
