@@ -13,3 +13,4 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
     --version $HELM_CHART_VERSION
 
 kubectl apply -f dashboard/dcgm-dashboard-configmap.yaml -n monitoring
+kubectl apply -f dashboard/triton-dashboard-configmap.yaml -n monitoring
