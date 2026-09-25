@@ -7,6 +7,12 @@
 $ curl -fL -o model.onnx https://github.com/onnx/models/raw/refs/heads/main/validated/vision/classification/resnet/model/resnet50-v2-7.onnx
 ```
 
+## How to download synset.txt
+
+```bash
+$ curl -fL -o synset.txt https://raw.githubusercontent.com/onnx/models/refs/heads/main/validated/vision/classification/synset.txt
+```
+
 ## Model health check
 
 ```bash

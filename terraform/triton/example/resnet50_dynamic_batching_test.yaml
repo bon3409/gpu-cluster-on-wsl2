@@ -1,0 +1,1417 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: resnet50-assets-pv
+spec:
+  capacity:
+    storage: 1Gi
+
+  accessModes:
+    - ReadOnlyMany
+
+  persistentVolumeReclaimPolicy: Retain
+
+  storageClassName: resnet50-local
+
+  hostPath:
+    path: /mnt/data/model_repository/resnet50
+    type: Directory
+
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: resnet50-assets-pvc
+  namespace: triton
+spec:
+  accessModes:
+    - ReadOnlyMany
+
+  storageClassName: resnet50-local
+
+  resources:
+    requests:
+      storage: 1Gi
+
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resnet50-inference-client-script
+  namespace: triton
+data:
+  client.py: |
+    import json
+    import math
+    import sys
+    import threading
+    import time
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from PIL import Image
+
+
+    # ============================================================
+    # Configuration
+    # ============================================================
+
+    TRITON_URL = (
+        "http://triton-server-service.triton.svc.cluster.local:8000"
+    )
+
+    MODEL_NAME = "resnet50"
+
+    IMAGE_DIR = "/data"
+    LABEL_PATH = f"{IMAGE_DIR}/synset.txt"
+
+    # filename -> expected ImageNet synset
+    #
+    # The Job will use synset.txt to resolve the actual class_id.
+    IMAGE_TARGETS = {
+        "eskimo_dog.jpg": "n02109961",
+        "goldfish.jpg": "n01443537",
+        "golfcart.jpg": "n03445924",
+        "hummingbird.jpg": "n01833805",
+        "sea_lion.jpg": "n02077923",
+        "tabby_cat.jpg": "n02123045",
+        "teddy_bear.jpg": "n04399382",
+        "baseball.jpg": "n02799071",
+        "husky.jpg": "n02109961",
+    }
+
+    REQUEST_COUNT = len(IMAGE_TARGETS)
+
+    INPUT_NAME = "data"
+    OUTPUT_NAME = "resnetv24_dense0_fwd"
+
+    INPUT_SHAPE = [1, 3, 224, 224]
+
+    EXPECTED_LABEL_COUNT = 1000
+
+
+    # ============================================================
+    # HTTP helpers
+    # ============================================================
+
+    def http_get(url, timeout=10):
+        req = urllib.request.Request(
+            url,
+            method="GET",
+        )
+
+        with urllib.request.urlopen(
+            req,
+            timeout=timeout,
+        ) as response:
+
+            body = response.read().decode("utf-8")
+
+            return response.status, body
+
+
+    def http_post(url, payload, timeout=60):
+        body = json.dumps(
+            payload,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        with urllib.request.urlopen(
+            req,
+            timeout=timeout,
+        ) as response:
+
+            response_body = (
+                response.read()
+                .decode("utf-8")
+            )
+
+            return (
+                response.status,
+                json.loads(response_body),
+            )
+
+
+    # ============================================================
+    # Triton statistics
+    # ============================================================
+
+    def get_model_stats():
+        status, body = http_get(
+            f"{TRITON_URL}/v2/models/{MODEL_NAME}/stats"
+        )
+
+        if status != 200:
+            raise RuntimeError(
+                f"Stats API returned HTTP {status}"
+            )
+
+        data = json.loads(body)
+
+        model_stats = data.get(
+            "model_stats"
+        )
+
+        if not model_stats:
+            raise RuntimeError(
+                "No model_stats returned by Triton"
+            )
+
+        return model_stats[0]
+
+
+    def get_basic_stats(stats):
+        return {
+            "inference_count": stats.get(
+                "inference_count",
+                0,
+            ),
+            "execution_count": stats.get(
+                "execution_count",
+                0,
+            ),
+        }
+
+
+    def get_batch_counts(stats):
+        """
+        Return cumulative execution count by batch size.
+
+        Triton statistics look like:
+
+        "batch_stats": [
+            {
+                "batch_size": 4,
+                "compute_infer": {
+                    "count": 10,
+                    "ns": ...
+                }
+            }
+        ]
+        """
+
+        result = {}
+
+        for item in stats.get(
+            "batch_stats",
+            [],
+        ):
+
+            batch_size = int(
+                item.get(
+                    "batch_size",
+                    0,
+                )
+            )
+
+            compute_infer = item.get(
+                "compute_infer",
+                {}
+            )
+
+            count = int(
+                compute_infer.get(
+                    "count",
+                    0,
+                )
+            )
+
+            result[batch_size] = count
+
+        return result
+
+
+    def calculate_batch_deltas(
+        before,
+        after,
+    ):
+        before_counts = get_batch_counts(
+            before
+        )
+
+        after_counts = get_batch_counts(
+            after
+        )
+
+        batch_sizes = sorted(
+            set(before_counts)
+            | set(after_counts)
+        )
+
+        deltas = {}
+
+        for batch_size in batch_sizes:
+
+            delta = (
+                after_counts.get(
+                    batch_size,
+                    0,
+                )
+                -
+                before_counts.get(
+                    batch_size,
+                    0,
+                )
+            )
+
+            if delta > 0:
+                deltas[batch_size] = delta
+
+        return deltas
+
+
+    # ============================================================
+    # Image preprocessing
+    # ============================================================
+
+    def preprocess_image(image_path):
+        """
+        ImageNet preprocessing for ResNet50.
+
+        Input:
+            arbitrary RGB image
+
+        Output:
+            flat FP32 tensor containing:
+
+            [1, 3, 224, 224]
+
+        Steps:
+
+            image
+            ↓
+            RGB
+            ↓
+            resize shortest side to 256
+            ↓
+            center crop 224x224
+            ↓
+            pixel / 255
+            ↓
+            ImageNet normalization
+            ↓
+            HWC -> CHW
+            ↓
+            flatten
+        """
+
+        image = Image.open(
+            image_path
+        ).convert("RGB")
+
+        original_size = image.size
+
+        width, height = image.size
+
+        # Resize shortest side to 256
+        if width < height:
+
+            new_width = 256
+
+            new_height = round(
+                height * 256 / width
+            )
+
+        else:
+
+            new_height = 256
+
+            new_width = round(
+                width * 256 / height
+            )
+
+        image = image.resize(
+            (
+                new_width,
+                new_height,
+            ),
+            Image.Resampling.BILINEAR,
+        )
+
+        # Center crop to 224x224
+        left = (
+            image.width - 224
+        ) // 2
+
+        top = (
+            image.height - 224
+        ) // 2
+
+        image = image.crop(
+            (
+                left,
+                top,
+                left + 224,
+                top + 224,
+            )
+        )
+
+        # ImageNet normalization
+        mean = [
+            0.485,
+            0.456,
+            0.406,
+        ]
+
+        std = [
+            0.229,
+            0.224,
+            0.225,
+        ]
+
+        pixels = list(
+            image.getdata()
+        )
+
+        tensor = []
+
+        # PIL gives HWC / RGB.
+        # Triton model expects NCHW.
+        #
+        # Because each request is batch=1:
+        #
+        # [H, W, C]
+        #     ↓
+        # [1, C, H, W]
+        #
+        # We flatten it into a JSON array.
+
+        for channel in range(3):
+
+            for pixel in pixels:
+
+                value = (
+                    pixel[channel]
+                    / 255.0
+                )
+
+                value = (
+                    value - mean[channel]
+                ) / std[channel]
+
+                tensor.append(
+                    float(value)
+                )
+
+        if len(tensor) != (
+            1 * 3 * 224 * 224
+        ):
+
+            raise RuntimeError(
+                "Unexpected tensor size: "
+                f"{len(tensor)}"
+            )
+
+        return (
+            tensor,
+            original_size,
+            image.size,
+        )
+
+
+    # ============================================================
+    # Softmax
+    # ============================================================
+
+    def softmax(scores):
+        """
+        Numerically stable softmax.
+        """
+
+        max_score = max(scores)
+
+        exp_scores = [
+            math.exp(
+                score - max_score
+            )
+            for score in scores
+        ]
+
+        total = sum(exp_scores)
+
+        return [
+            value / total
+            for value in exp_scores
+        ]
+
+
+    # ============================================================
+    # Load labels
+    # ============================================================
+
+    def load_labels():
+        with open(
+            LABEL_PATH,
+            "r",
+            encoding="utf-8",
+        ) as f:
+
+            labels = [
+                line.strip()
+                for line in f
+                if line.strip()
+            ]
+
+        if len(labels) != EXPECTED_LABEL_COUNT:
+
+            print(
+                "WARNING: expected "
+                f"{EXPECTED_LABEL_COUNT} labels, "
+                f"but found {len(labels)}"
+            )
+
+        return labels
+
+
+    # ============================================================
+    # Resolve synset -> class_id
+    # ============================================================
+
+    def build_synset_index(labels):
+        """
+        Example:
+
+            n01443537 -> 1
+            n02077923 -> 150
+            n02123045 -> 281
+        """
+
+        result = {}
+
+        for class_id, label in enumerate(labels):
+
+            parts = label.split(
+                maxsplit=1
+            )
+
+            if not parts:
+                continue
+
+            synset = parts[0]
+
+            result[synset] = class_id
+
+        return result
+
+
+    # ============================================================
+    # Build one Triton request
+    # ============================================================
+
+    def build_request(tensor):
+        """
+        IMPORTANT:
+
+        Every HTTP request is intentionally batch=1.
+
+        Triton Dynamic Batcher is responsible for combining
+        multiple independent requests.
+
+        Client:
+            [1, 3, 224, 224]
+            [1, 3, 224, 224]
+            [1, 3, 224, 224]
+            ...
+
+        Triton may execute:
+            [4, 3, 224, 224]
+        or
+            [8, 3, 224, 224]
+        """
+
+        return {
+            "inputs": [
+                {
+                    "name": INPUT_NAME,
+
+                    "shape": INPUT_SHAPE,
+
+                    "datatype": "FP32",
+
+                    "data": tensor,
+                }
+            ],
+
+            "outputs": [
+                {
+                    "name": OUTPUT_NAME,
+                }
+            ],
+        }
+
+
+    # ============================================================
+    # Send one request
+    # ============================================================
+
+    def send_request(
+        request_id,
+        image_name,
+        expected_synset,
+        labels,
+        request_body,
+        barrier,
+    ):
+        """
+        Send exactly ONE batch=1 inference request.
+
+        Triton may dynamically combine this request
+        with other requests.
+        """
+
+        # Release all workers together so that requests
+        # arrive at Triton at approximately the same time.
+        barrier.wait()
+
+        start = time.perf_counter()
+
+        status, response = http_post(
+            f"{TRITON_URL}/v2/models/{MODEL_NAME}/infer",
+            request_body,
+        )
+
+        latency_ms = (
+            time.perf_counter() - start
+        ) * 1000.0
+
+        if status != 200:
+
+            raise RuntimeError(
+                f"Request {request_id} "
+                f"returned HTTP {status}"
+            )
+
+        outputs = response.get(
+            "outputs",
+            []
+        )
+
+        if not outputs:
+
+            raise RuntimeError(
+                f"Request {request_id} "
+                "returned no outputs"
+            )
+
+        output = outputs[0]
+
+        if output["name"] != OUTPUT_NAME:
+
+            raise RuntimeError(
+                "Unexpected output name: "
+                f"{output['name']}"
+            )
+
+        scores = output["data"]
+
+        if len(scores) != 1000:
+
+            raise RuntimeError(
+                "Unexpected output size: "
+                f"{len(scores)}"
+            )
+
+        probabilities = softmax(
+            scores
+        )
+
+        # Top-5
+        top5 = sorted(
+            enumerate(probabilities),
+            key=lambda item: item[1],
+            reverse=True,
+        )[:5]
+
+        predicted_class_id = top5[0][0]
+
+        confidence = top5[0][1]
+
+        predicted_label = labels[
+            predicted_class_id
+        ]
+
+        predicted_synset = (
+            predicted_label.split()[0]
+        )
+
+        correct = (
+            predicted_synset
+            == expected_synset
+        )
+
+        return {
+            "request_id": request_id,
+
+            "image": image_name,
+
+            "expected_synset": expected_synset,
+
+            "predicted_class_id":
+                predicted_class_id,
+
+            "predicted_synset":
+                predicted_synset,
+
+            "predicted_label":
+                predicted_label,
+
+            "confidence":
+                confidence,
+
+            "latency_ms":
+                latency_ms,
+
+            "correct":
+                correct,
+
+            "top5":
+                top5,
+        }
+
+
+    # ============================================================
+    # Main
+    # ============================================================
+
+    print(
+        "=== Triton ResNet50 "
+        "Dynamic Batching Test ==="
+    )
+
+    print(
+        f"Triton URL : {TRITON_URL}"
+    )
+
+    print(
+        f"Model      : {MODEL_NAME}"
+    )
+
+    print(
+        f"Requests   : {REQUEST_COUNT}"
+    )
+
+    print(
+        f"Image dir  : {IMAGE_DIR}"
+    )
+
+
+    # ============================================================
+    # 1. Server readiness
+    # ============================================================
+
+    print(
+        "\n[1] Checking Triton readiness..."
+    )
+
+    for attempt in range(30):
+
+        try:
+
+            status, _ = http_get(
+                f"{TRITON_URL}/v2/health/ready"
+            )
+
+            if status == 200:
+
+                print(
+                    "Triton server is READY"
+                )
+
+                break
+
+        except Exception as e:
+
+            print(
+                f"Waiting for Triton: "
+                f"{type(e).__name__}: {e}"
+            )
+
+        time.sleep(2)
+
+    else:
+
+        print(
+            "ERROR: Triton server is not ready"
+        )
+
+        sys.exit(1)
+
+
+    # ============================================================
+    # 2. Model readiness
+    # ============================================================
+
+    print(
+        "\n[2] Checking model readiness..."
+    )
+
+    try:
+
+        status, _ = http_get(
+            f"{TRITON_URL}/v2/models/{MODEL_NAME}/ready"
+        )
+
+        if status != 200:
+
+            print(
+                f"ERROR: model returned "
+                f"HTTP {status}"
+            )
+
+            sys.exit(1)
+
+    except Exception as e:
+
+        print(
+            f"ERROR: model readiness failed: {e}"
+        )
+
+        sys.exit(1)
+
+
+    print(
+        f"Model {MODEL_NAME} is READY"
+    )
+
+
+    # ============================================================
+    # 3. Load labels
+    # ============================================================
+
+    print(
+        "\n[3] Loading ImageNet labels..."
+    )
+
+    try:
+
+        labels = load_labels()
+
+    except Exception as e:
+
+        print(
+            f"ERROR: failed to load labels: {e}"
+        )
+
+        sys.exit(1)
+
+
+    synset_to_class_id = (
+        build_synset_index(labels)
+    )
+
+
+    print(
+        f"Loaded labels: {len(labels)}"
+    )
+
+
+    # Print expected class IDs
+    print(
+        "\nExpected classes:"
+    )
+
+    for image_name, expected_synset in (
+        IMAGE_TARGETS.items()
+    ):
+
+        class_id = synset_to_class_id.get(
+            expected_synset
+        )
+
+        if class_id is None:
+
+            print(
+                f"  ERROR: "
+                f"{expected_synset} "
+                f"not found in synset.txt"
+            )
+
+            sys.exit(1)
+
+        print(
+            f"  {image_name:20s}"
+            f" -> class_id={class_id:3d}"
+            f" -> {expected_synset}"
+        )
+
+
+    # ============================================================
+    # 4. Load and preprocess ALL images first
+    # ============================================================
+
+    print(
+        "\n[4] Loading and preprocessing images..."
+    )
+
+    prepared_requests = []
+
+    for request_id, (
+        image_name,
+        expected_synset,
+    ) in enumerate(
+        IMAGE_TARGETS.items(),
+        start=1,
+    ):
+
+        image_path = (
+            f"{IMAGE_DIR}/{image_name}"
+        )
+
+        try:
+
+            tensor, original_size, model_size = (
+                preprocess_image(
+                    image_path
+                )
+            )
+
+        except Exception as e:
+
+            print(
+                f"ERROR: failed to preprocess "
+                f"{image_name}: {e}"
+            )
+
+            sys.exit(1)
+
+        prepared_requests.append(
+            {
+                "request_id":
+                    request_id,
+
+                "image_name":
+                    image_name,
+
+                "expected_synset":
+                    expected_synset,
+
+                "tensor":
+                    tensor,
+
+                "original_size":
+                    original_size,
+
+                "model_size":
+                    model_size,
+
+                "request_body":
+                    build_request(tensor),
+            }
+        )
+
+        print(
+            f"  request={request_id} "
+            f"image={image_name} "
+            f"original={original_size} "
+            f"model={model_size}"
+        )
+
+
+    # ============================================================
+    # 5. Statistics BEFORE
+    # ============================================================
+
+    print(
+        "\n[5] Reading Triton statistics BEFORE inference..."
+    )
+
+    try:
+
+        stats_before = get_model_stats()
+
+    except Exception as e:
+
+        print(
+            f"ERROR: failed to read Triton stats: {e}"
+        )
+
+        sys.exit(1)
+
+
+    basic_before = get_basic_stats(
+        stats_before
+    )
+
+    print(
+        f"Inference count : "
+        f"{basic_before['inference_count']}"
+    )
+
+    print(
+        f"Execution count : "
+        f"{basic_before['execution_count']}"
+    )
+
+    batch_before = get_batch_counts(
+        stats_before
+    )
+
+    print(
+        f"Batch counts    : "
+        f"{batch_before}"
+    )
+
+
+    # ============================================================
+    # 6. Send 8 concurrent requests
+    # ============================================================
+
+    print(
+        "\n[6] Sending "
+        f"{REQUEST_COUNT} DIFFERENT images "
+        "concurrently..."
+    )
+
+    print(
+        "\nIMPORTANT:"
+    )
+
+    print(
+        "Each HTTP request uses "
+        "[1,3,224,224]."
+    )
+
+    print(
+        "Triton Dynamic Batching will "
+        "combine them server-side."
+    )
+
+
+    barrier = threading.Barrier(
+        REQUEST_COUNT
+    )
+
+    results = []
+
+
+    def run_one(item):
+
+        return send_request(
+            request_id=item["request_id"],
+            image_name=item["image_name"],
+            expected_synset=item["expected_synset"],
+            labels=labels,
+            request_body=item["request_body"],
+            barrier=barrier,
+        )
+
+
+    try:
+
+        with ThreadPoolExecutor(
+            max_workers=REQUEST_COUNT
+        ) as executor:
+
+            futures = [
+                executor.submit(
+                    run_one,
+                    item,
+                )
+
+                for item in prepared_requests
+            ]
+
+            for future in as_completed(
+                futures
+            ):
+
+                results.append(
+                    future.result()
+                )
+
+    except Exception as e:
+
+        print(
+            f"\nERROR: inference request failed: {e}"
+        )
+
+        sys.exit(1)
+
+
+    results.sort(
+        key=lambda item:
+            item["request_id"]
+    )
+
+
+    # ============================================================
+    # 7. Prediction results
+    # ============================================================
+
+    print(
+        "\n=== Prediction Results ==="
+    )
+
+    for result in results:
+
+        print(
+            f"\nrequest       : "
+            f"{result['request_id']}"
+        )
+
+        print(
+            f"image         : "
+            f"{result['image']}"
+        )
+
+        print(
+            f"expected      : "
+            f"{result['expected_synset']}"
+        )
+
+        print(
+            f"class_id      : "
+            f"{result['predicted_class_id']}"
+        )
+
+        print(
+            f"synset        : "
+            f"{result['predicted_synset']}"
+        )
+
+        print(
+            f"label         : "
+            f"{result['predicted_label']}"
+        )
+
+        print(
+            f"confidence    : "
+            f"{result['confidence']:.6f}"
+        )
+
+        print(
+            f"correct       : "
+            f"{result['correct']}"
+        )
+
+        print(
+            f"latency       : "
+            f"{result['latency_ms']:.2f} ms"
+        )
+
+        print(
+            "Top-5:"
+        )
+
+        for class_id, probability in (
+            result["top5"]
+        ):
+
+            print(
+                f"  {class_id:4d} "
+                f"{probability:.6f} "
+                f"{labels[class_id]}"
+            )
+
+
+    # ============================================================
+    # 8. Prediction validation
+    # ============================================================
+
+    correct_count = sum(
+        result["correct"]
+        for result in results
+    )
+
+
+    print(
+        "\n=== Prediction Validation ==="
+    )
+
+    print(
+        f"Correct predictions: "
+        f"{correct_count}/{REQUEST_COUNT}"
+    )
+
+
+    # ============================================================
+    # 9. Statistics AFTER
+    # ============================================================
+
+    print(
+        "\n[7] Reading Triton statistics AFTER inference..."
+    )
+
+    # Wait briefly for statistics update.
+    time.sleep(0.5)
+
+
+    try:
+
+        stats_after = get_model_stats()
+
+    except Exception as e:
+
+        print(
+            f"ERROR: failed to read Triton stats: {e}"
+        )
+
+        sys.exit(1)
+
+
+    basic_after = get_basic_stats(
+        stats_after
+    )
+
+
+    inference_delta = (
+        basic_after["inference_count"]
+        -
+        basic_before["inference_count"]
+    )
+
+    execution_delta = (
+        basic_after["execution_count"]
+        -
+        basic_before["execution_count"]
+    )
+
+
+    print(
+        f"Inference delta : "
+        f"{inference_delta}"
+    )
+
+    print(
+        f"Execution delta : "
+        f"{execution_delta}"
+    )
+
+
+    # ============================================================
+    # 10. Batch statistics
+    # ============================================================
+
+    batch_deltas = calculate_batch_deltas(
+        stats_before,
+        stats_after,
+    )
+
+
+    print(
+        "\n=== Dynamic Batch Statistics ==="
+    )
+
+    if not batch_deltas:
+
+        print(
+            "No new batch executions were "
+            "reported."
+        )
+
+    else:
+
+        for batch_size, count in sorted(
+            batch_deltas.items()
+        ):
+
+            print(
+                f"batch_size={batch_size} "
+                f"executions={count}"
+            )
+
+
+    # ============================================================
+    # 11. Dynamic batching validation
+    # ============================================================
+
+    print(
+        "\n=== Dynamic Batching Validation ==="
+    )
+
+
+    if inference_delta != REQUEST_COUNT:
+
+        print(
+            "❌ FAIL: expected "
+            f"{REQUEST_COUNT} successful "
+            f"inferences, "
+            f"got {inference_delta}"
+        )
+
+        sys.exit(2)
+
+
+    if execution_delta < inference_delta:
+
+        print(
+            "✅ PASS: dynamic batching "
+            "combined multiple requests."
+        )
+
+        print(
+            f"{inference_delta} inference requests "
+            f"-> {execution_delta} model executions"
+        )
+
+    else:
+
+        print(
+            "⚠️ WARNING: no reduction in "
+            "execution count was observed."
+        )
+
+        print(
+            "This does NOT necessarily mean "
+            "Dynamic Batching is broken."
+        )
+
+        print(
+            "The requests may not have arrived "
+            "within Triton's configured queue "
+            "delay window."
+        )
+
+
+    # ============================================================
+    # 12. Prediction validation result
+    # ============================================================
+
+    print(
+        "\n=== Prediction Validation ==="
+    )
+
+    if correct_count == REQUEST_COUNT:
+
+        print(
+            "✅ PASS: all images matched "
+            "their expected ImageNet synset."
+        )
+
+    else:
+
+        print(
+            f"⚠️ WARNING: "
+            f"{correct_count}/{REQUEST_COUNT} "
+            "images matched the expected synset."
+        )
+
+
+    # ============================================================
+    # 13. Final result
+    # ============================================================
+
+    print(
+        "\n=== Final Result ==="
+    )
+
+
+    dynamic_batching_passed = (
+        execution_delta
+        < inference_delta
+    )
+
+    prediction_passed = (
+        correct_count
+        == REQUEST_COUNT
+    )
+
+
+    if (
+        dynamic_batching_passed
+        and prediction_passed
+    ):
+
+        print(
+            "✅ PASS: "
+            "inference + prediction validation "
+            "+ dynamic batching all succeeded."
+        )
+
+    elif dynamic_batching_passed:
+
+        print(
+            "⚠️ PASS: dynamic batching was observed, "
+            "but some model predictions did not "
+            "match the expected labels."
+        )
+
+    elif prediction_passed:
+
+        print(
+            "⚠️ PASS: all predictions matched, "
+            "but dynamic batching was not observed "
+            "in this particular run."
+        )
+
+    else:
+
+        print(
+            "⚠️ Test completed with validation "
+            "mismatches."
+        )
+
+
+    print(
+        "\n=== Test Completed ==="
+    )
+
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: resnet50-dynamic-batching-test
+  namespace: triton
+spec:
+  backoffLimit: 0
+
+  ttlSecondsAfterFinished: 30
+
+  template:
+    spec:
+      restartPolicy: Never
+
+      containers:
+        - name: resnet50-client
+
+          # Reuse the image created for your
+          # DenseNet integration test.
+          #
+          # It contains:
+          # Python + Pillow
+          #
+          # No pip install is required when
+          # this Job starts.
+          image: python:3.12-slim
+
+          imagePullPolicy: IfNotPresent
+
+          command:
+            - /bin/sh
+            - -c
+            - |
+              pip install --no-cache-dir Pillow
+              python /app/client.py
+          volumeMounts:
+
+            - name: resnet50-assets
+              mountPath: /data
+              readOnly: true
+
+            - name: client-script
+              mountPath: /app
+              readOnly: true
+
+      volumes:
+
+        - name: resnet50-assets
+
+          persistentVolumeClaim:
+            claimName: resnet50-assets-pvc
+
+        - name: client-script
+
+          configMap:
+            name: resnet50-inference-client-script
