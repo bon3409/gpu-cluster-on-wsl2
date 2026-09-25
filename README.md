@@ -57,8 +57,7 @@ WSL2 Host (Windows)
 │   ├── data/
 │   │   └── model_repository/    # Model assets (synced to minikube VM via --mount)
 │   │       ├── densenet_onnx/
-│   │       ├── resnet50/
-│   │       └── mobilenetv2/
+│   │       └── resnet50/
 │   └── gpu-test/
 │       ├── gpu-test.yaml        # Basic CUDA vectoradd Pod
 │       ├── gpu-burn-30s.yaml    # GPU stress test Pod (COMPUTE=61)
@@ -77,6 +76,7 @@ WSL2 Host (Windows)
 │   │   ├── values.yaml           # Grafana + DCGM/Volcano scrape configs
 │   │   └── dashboard/
 │   │       └── dcgm-dashboard-configmap.yaml
+│   │       └── triton-dashboard-configmap.yaml
 │   └── alloy/
 │       ├── install.sh            # Install Alloy
 │       └── values.yaml           # DaemonSet config: cAdvisor + kubelet → Prometheus
@@ -111,8 +111,9 @@ WSL2 Host (Windows)
 │       │   ├── values.yaml
 │       │   └── templates/
 │       └── example/
-│           ├── densenet_onnx_mock.yaml      # Mock tensor test Job
-│           └── densenet_sea_lion_test.yaml  # Real image inference test Job
+│           ├── densenet_onnx_mock.yaml              # Mock tensor test Job
+│           ├── densenet_sea_lion_test.yaml          # Real image inference test Job
+│           └── resnet50_dynamic_batching_test.yaml  # Real image inference test for dynamic batching Job
 ```
 
 ---
