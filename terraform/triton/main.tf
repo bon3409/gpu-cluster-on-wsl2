@@ -1,3 +1,10 @@
+locals {
+  manifests_file_hash = sha256(join("", [
+    for f in sort(fileset("${path.module}/chart", "**")) :
+    filesha256("${path.module}/chart/${f}")
+  ]))
+}
+
 # 使用 helm_release Resource 部署本地 Chart
 resource "helm_release" "triton_server" {
   name             = "triton-server"
@@ -14,5 +21,11 @@ resource "helm_release" "triton_server" {
     { name  = "resources.limits.nvidia\\.com/gpu"
       value = "1"
     }
+  ]
+
+  values = [
+    jsonencode({
+      manifests_file_hash = local.manifests_file_hash
+    })
   ]
 }

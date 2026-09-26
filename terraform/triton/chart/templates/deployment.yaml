@@ -14,6 +14,110 @@ spec:
       labels:
         app: {{ .Release.Name }}
     spec:
+      serviceAccountName: triton-gpu-checker
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      initContainers:
+        - name: wait-for-gpu
+          image: alpine/kubectl:1.37.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: EXPECTED_GPU_COUNT
+              value: {{ index .Values.resources.requests "nvidia.com/gpu" | quote }}
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -u
+
+              echo "======================================"
+              echo "Waiting for NVIDIA GPU to become ready"
+              echo "Node: ${NODE_NAME}"
+              echo "Expected GPU Count: ${EXPECTED_GPU_COUNT}"
+              echo "======================================"
+
+              TIMEOUT=600
+              START=$(date +%s)
+
+              while true; do
+
+                NOW=$(date +%s)
+                ELAPSED=$((NOW - START))
+
+                if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+                  echo "ERROR: GPU readiness timeout after ${TIMEOUT}s"
+                  exit 1
+                fi
+
+                # ------------------------------------------------
+                # 1. GPU Operator ClusterPolicy
+                # ------------------------------------------------
+
+                CLUSTER_POLICY_STATE=$(
+                  kubectl get clusterpolicy cluster-policy \
+                    -o jsonpath='{.status.state}' \
+                    2>/dev/null || true
+                )
+
+                # ------------------------------------------------
+                # 2. Node GPU resource
+                # ------------------------------------------------
+
+                GPU_ALLOCATABLE=$(
+                  kubectl get node "${NODE_NAME}" \
+                    -o jsonpath='{.status.allocatable.nvidia\.com/gpu}' \
+                    2>/dev/null || true
+                )
+
+                # ------------------------------------------------
+                # 3. GPU present label
+                # ------------------------------------------------
+
+                GPU_PRESENT=$(
+                  kubectl get node "${NODE_NAME}" \
+                    -o jsonpath='{.metadata.labels.nvidia\.com/gpu\.present}' \
+                    2>/dev/null || true
+                )
+
+                echo \
+                  "elapsed=${ELAPSED}s " \
+                  "ClusterPolicy=${CLUSTER_POLICY_STATE:-unknown} " \
+                  "GPU_PRESENT=${GPU_PRESENT:-unknown} " \
+                  "GPU_ALLOCATABLE=${GPU_ALLOCATABLE:-unknown}" \
+                  "EXPECTED_GPU_COUNT=${EXPECTED_GPU_COUNT}"
+
+                # ------------------------------------------------
+                # Ready condition
+                #
+                # ClusterPolicy must be ready
+                # GPU node must have nvidia.com/gpu allocatable
+                # ------------------------------------------------
+
+                if [ "${CLUSTER_POLICY_STATE}" = "ready" ] \
+                  && [ "${GPU_PRESENT}" = "true" ] \
+                  && [ -n "${GPU_ALLOCATABLE}" ] \
+                  && [ "${GPU_ALLOCATABLE}" -ge "${EXPECTED_GPU_COUNT}" ]; then
+
+                  echo
+                  echo "NVIDIA GPU is READY"
+                  echo "ClusterPolicy: ${CLUSTER_POLICY_STATE}"
+                  echo "GPU present:   ${GPU_PRESENT}"
+                  echo "GPU allocatable: ${GPU_ALLOCATABLE}"
+                  echo "EXPECTED_GPU_COUNT: ${EXPECTED_GPU_COUNT}"
+                  echo
+                  echo "Starting Triton..."
+
+                  exit 0
+                fi
+
+                sleep 2
+              done
+
       containers:
         - name: tritonserver
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
